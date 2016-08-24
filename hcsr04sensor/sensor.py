@@ -31,6 +31,28 @@ class Measurement(object):
         self.unit = unit
         self.round_to = round_to
 
+	self.setup()
+
+    def setup(self):
+        if self.unit == 'imperial':
+            self.temperature = (self.temperature - 32) * 0.5556
+        elif self.unit == 'metric':
+            pass
+        else:
+            raise ValueError(
+                'Wrong Unit Type. Unit Must be imperial or metric')
+
+        self.speed_of_sound = 331.3 * math.sqrt(1+(self.temperature / 273.15))
+
+        GPIO.setwarnings(False)
+        GPIO.setmode(GPIO.BCM)
+        GPIO.setup(self.trig_pin, GPIO.OUT)
+        GPIO.setup(self.echo_pin, GPIO.IN)
+
+    def cleanup(self):
+        GPIO.cleanup()
+	
+
     def raw_distance(self, sample_size=11, sample_wait=0.1):
         '''Return an error corrected unrounded distance, in cm, of an object 
         adjusted for temperature in Celcius.  The distance calculated
@@ -56,22 +78,10 @@ class Measurement(object):
 
         r = value.raw_distance(sample_wait=0.03)
         '''
+        sonar_signal_off = 0
+        sonar_signal_on = 0
 
-        if self.unit == 'imperial':
-            self.temperature = (self.temperature - 32) * 0.5556
-        elif self.unit == 'metric':
-            pass
-        else:
-            raise ValueError(
-                'Wrong Unit Type. Unit Must be imperial or metric')
-
-        speed_of_sound = 331.3 * math.sqrt(1+(self.temperature / 273.15))
         sample = []
-        # setup input/output pins
-        GPIO.setwarnings(False)
-        GPIO.setmode(GPIO.BCM)
-        GPIO.setup(self.trig_pin, GPIO.OUT)
-        GPIO.setup(self.echo_pin, GPIO.IN)
         
         for distance_reading in range(sample_size):
             GPIO.output(self.trig_pin, GPIO.LOW)
@@ -84,12 +94,11 @@ class Measurement(object):
             while GPIO.input(self.echo_pin) == 1:
                 sonar_signal_on = time.time()
             time_passed = sonar_signal_on - sonar_signal_off
-            distance_cm = time_passed * ((speed_of_sound * 100) / 2)
+            distance_cm = time_passed * ((self.speed_of_sound * 100) / 2)
             sample.append(distance_cm)
         sorted_sample = sorted(sample)
         # Only cleanup the pins used to prevent clobbering
         # any others in use by the program
-        GPIO.cleanup((self.trig_pin, self.echo_pin))
         return sorted_sample[sample_size // 2]
 
     def depth_metric(self, median_reading, hole_depth):
